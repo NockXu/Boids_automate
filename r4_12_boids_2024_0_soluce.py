@@ -21,12 +21,11 @@ https://www.gyan.dev/ffmpeg/builds/
 from __future__ import annotations
 from typing import TypeAlias, Callable
 
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import animation, path
+import pygame
+from matplotlib import path
+
 # a adapter en fonction de votre installation de ffmpeg
-plt.rcParams['animation.ffmpeg_path'] = "/usr/bin/ffmpeg"
-radians :  TypeAlias= float
 
 # boids shape using path.Path
 boid_shape = path.Path(
@@ -213,6 +212,18 @@ class Boid:
                 if self.boostValue >= Boid.maxBoostValue: 
                     self.boostValue = Boid.maxBoostValue
 
+class PredatorBoid(Boid):
+    def __init__(self, position=None, vitesse=None):
+        super().__init__(position, vitesse)
+        self.eating_range = 20  # Range within which the predator can eat other boids
+
+    def eat(self, population: list[Boid]) -> list[Boid]:
+        """Eat boids within the eating range."""
+        new_population = []
+        for boid in population:
+            if self.distance(boid) > self.eating_range:
+                new_population.append(boid)
+        return new_population
 
 # ------------------------------------------------------------------------------
 # fonctions d'interaction
@@ -243,39 +254,20 @@ def buildBoidCentripete() -> Boid:
     return boid
 
 # ------------------------------------------------------------------------------
-# simulation (avec matplotlib)
+# simulation (avec pygame)
 # ------------------------------------------------------------------------------
 class Simulation:
-    def __init__(self: Simulation, n: int, ax, seed: int = 2042) -> None:
+    def __init__(self: Simulation, n: int, seed: int = 2042) -> None:
       """
         Args:
           n: int = nombre de boids
-          ax: matplotlib.axes.Axes = where to plot the boids
           seed: int
       """
 
       np.random.seed(seed)
 
       self.boids = list(buildBoidCentripete() for _ in range(n))
-      self.artists = list()
-      self.plot(ax)
-
-    def plot(self: Simulation, ax) -> None:
-
-        for boid in self.boids:
-            p, *_ = ax.plot(
-                *boid.x,
-                color=".1",
-                markersize=15,
-                marker=pathRotate(boid_shape, boid.direction),
-            )
-            self.artists.append(p)
-
-        ax.set_xlim((-Boid.taille, Boid.taille))
-        ax.set_ylim((-Boid.taille, Boid.taille))
-        ax.set_aspect(1)
-        ax.xaxis.set_visible(False)
-        ax.yaxis.set_visible(False)
+      self.predator = PredatorBoid()  # Add a predator boid
 
     def iteration(self: Simulation, frame: int):
         """
@@ -285,29 +277,56 @@ class Simulation:
         print(f"iteration {frame}/400")
         self.boids = list(boid.interaction(self.boids) for boid in self.boids)
 
-        for p, boid in zip(self.artists, self.boids):
-            p.set_data([boid.x[0]], [boid.x[1]])
-            p.set_marker(pathRotate(boid_shape, boid.direction))
+        # Predator eats boids
+        self.boids = self.predator.eat(self.boids)
 
-        return self.artists
+        self.predator.interaction(self.boids)
 
 # ------------------------------------------------------------------------------
 # main
 # ------------------------------------------------------------------------------
 
-fig, ax = plt.subplots(figsize=(7, 7))
-simulation = Simulation(n=30, ax=ax)
+# Initialize Pygame
+pygame.init()
 
-anim = animation.FuncAnimation(
-    fig,
-    simulation.iteration,
-    frames=range(0, 400),
-    interval=150,
-    blit=True,
-    repeat=True,
-)
+# Define colors
+BLUE = (0, 0, 255)
+RED = (255, 0, 0)
 
-# saving to m4 using ffmpeg writer 
-anim.save('boidsLongCentipete.mp4') 
+# Set up display
+screen_size = (Boid.taille * 2, Boid.taille * 2)
+screen = pygame.display.set_mode(screen_size)
+pygame.display.set_caption('Boid Simulation')
 
+# Main loop
+running = True
+clock = pygame.time.Clock()
 
+# Create simulation
+simulation = Simulation(n=30)
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    # Clear screen
+    screen.fill((255, 255, 255))
+
+    # Update boids
+    simulation.iteration(0)
+
+    # Draw boids
+    for boid in simulation.boids:
+        pygame.draw.circle(screen, BLUE, (int(boid.x[0] + Boid.taille), int(boid.x[1] + Boid.taille)), 5)
+
+    # Draw predator
+    pygame.draw.circle(screen, RED, (int(simulation.predator.x[0] + Boid.taille), int(simulation.predator.x[1] + Boid.taille)), 8)
+
+    # Refresh screen
+    pygame.display.flip()
+
+    # Cap the frame rate
+    clock.tick(60)
+
+pygame.quit()
