@@ -1,76 +1,35 @@
-# -*- coding: utf-8 -*-
-"""R4_12_boids_2024_0_soluce.py
-
-# R4.12 : Boids
----
-
-BUT 1 Info : parcours A
-
-BUT INFO Calais
-
-auteur : Rémi Cozot (remi.cozot@univ-littoral.fr), date : août 2024
-
-
----
-L'installation de ffmpeg est nécessaire pour la sauvegarde :
-https://www.gyan.dev/ffmpeg/builds/
-
 """
-
+Module contenant la classe Boid pour la simulation de boids.
+"""
 
 from __future__ import annotations
 from typing import TypeAlias, Callable
-
 import numpy as np
-import pygame
-from matplotlib import path
 
-# a adapter en fonction de votre installation de ffmpeg
+# Type pour les fonctions d'interaction
+funInteraction: TypeAlias = Callable[["Boid", list["Boid"]], float]
 
-# boids shape using path.Path
-boid_shape = path.Path(
-    # coordonnées du schéma ci-dessous, orienté vers la droite
-    vertices=np.array([[0, 0], [-100, 100], [200, 0], [-100, -100], [0, 0]]),
-    # 1: moveto, 2: lineto, 79: closepoly
-    # https://matplotlib.org/stable/api/path_api.html#matplotlib.path.Path
-    codes=np.array([1, 2, 2, 2, 79], dtype=np.uint8),
-)
-# ------------------------------------------------------------------------------
-# fonctions
-# ------------------------------------------------------------------------------
-def pathRotate(p: path.Path, angle: float) -> path.Path:
-    """
-      rotate path.Path by angle$
-
-      Args:
-        p: path.Path
-        angle: radians
-
-      Returns:
-
-        path.Path : return new path.Path
-    """
-    cos, sin = np.cos(angle), np.sin(angle)
-    newpath = p.vertices @ (np.array([[cos, sin], [-sin, cos]]))
-    return path.Path(newpath, p.codes)
-
-# ------------------------------------------------------------------------------
-# classes
-# ------------------------------------------------------------------------------
 class Boid:
+    """
+    Classe représentant un boid dans la simulation.
+    Un boid est une entité qui se déplace selon des règles simples
+    d'interaction avec les autres boids.
+    """
 
-    # attributs de classe
-    # taille du cadre
-    taille : int = 300
-    # nombre de voisins à considérer
-    max_voisins :int = 10
+    # Attributs de classe
+    taille: int = 300  # taille du cadre
+    max_voisins: int = 10  # nombre de voisins à considérer
+    maXVitesse: int = 10  # vitesse maximale
+    maxBoostValue: float = 3  # valeur maximale du boost
 
-    # attributs des boids
-    maXVitesse : int = 10
-    maxBoostValue : float = 3
-
-    # constructeur
     def __init__(self: Boid, position=None, vitesse=None) -> None:
+        """
+        Initialise un nouveau boid.
+        
+        Args:
+            position: position initiale (aléatoire si None)
+            vitesse: vitesse initiale (aléatoire si None)
+        """
         self.x = (
             position
             if position is not None
@@ -79,44 +38,59 @@ class Boid:
         self.dx = (
             vitesse if vitesse is not None else np.random.uniform(-5, 5, 2)
         )
-        # liste des fonctions d'interaction non incluse dans la classe et le poid associé
-        self.interactions : list[tuple[funInteraction, float]] = []
+        # Liste des fonctions d'interaction non incluse dans la classe et le poids associé
+        self.interactions: list[tuple[funInteraction, float]] = []
 
         # Permet de savoir si le boid est sous l'effet d'un boost
-        self.boost : bool = False
+        self.boost: bool = False
         # Initialise la puissance du boost
-        self.boostValue : float = Boid.maxBoostValue
+        self.boostValue: float = Boid.maxBoostValue
         
         # Cache pour stocker les voisins calculés
         self._voisins_cache = {}
         # Cache pour stocker les distances calculées
         self._distances_cache = {}
 
-    # methodes
-
     def add_interaction(self: Boid, fun: funInteraction, poids: float) -> None:
-        "Ajoute une fonction d'interaction à la liste des interactions."
+        """
+        Ajoute une fonction d'interaction à la liste des interactions.
+        
+        Args:
+            fun: fonction d'interaction
+            poids: poids associé à cette interaction
+        """
         self.interactions.append((fun, poids))
 
     def __repr__(self: Boid) -> str:
+        """Représentation textuelle du boid."""
         return f"<Boid({self.x.round(2)}, {self.dx.round(2)})>"
 
-    # getter et setter
+    # Getters et setters
     @property
     def vitesse(self: Boid) -> float:
+        """Calcule la norme du vecteur vitesse."""
         return np.linalg.norm(self.dx)
 
     @vitesse.setter
     def vitesse(self: Boid, value: float) -> None:
+        """Modifie la norme du vecteur vitesse en conservant sa direction."""
         self.dx = self.dx * value / self.vitesse
 
     @property
     def direction(self: Boid) -> float:
+        """Calcule la direction du boid en radians."""
         return np.arctan2(self.dx[1], self.dx[0])
 
-    # autres methodes
     def distance(self: Boid, other: Boid) -> float:
-        "Renvoie la distance entre deux Boids."
+        """
+        Calcule la distance entre deux boids.
+        
+        Args:
+            other: l'autre boid
+            
+        Returns:
+            float: distance entre les deux boids
+        """
         # Utiliser un cache pour éviter de recalculer les distances
         cache_key = (id(self), id(other))
         if cache_key not in self._distances_cache:
@@ -124,7 +98,15 @@ class Boid:
         return self._distances_cache[cache_key]
 
     def angle_mort(self: Boid, other: Boid) -> bool:
-        "Renvoie True si le Boid `other` est dans l'angle mort du Boid courant."
+        """
+        Vérifie si l'autre boid est dans l'angle mort du boid courant.
+        
+        Args:
+            other: l'autre boid
+            
+        Returns:
+            bool: True si l'autre boid est dans l'angle mort
+        """
         # Optimisation: éviter de recalculer les vecteurs
         v1 = self.dx  # Pas besoin de soustraire self.x car dx est déjà un vecteur
         v2 = other.x - self.x  # Vecteur de self vers other
@@ -141,10 +123,17 @@ class Boid:
         cos_angle = max(-1.0, min(1.0, cos_angle))
         return np.arccos(cos_angle) > 0.75 * np.pi
 
-    def voisins(
-        self: Boid, population: list[Boid], seuil: float
-    ) -> list[Boid]:
-        "Renvoie la liste des voisins visibles, triés par ordre croissant de distance."
+    def voisins(self: Boid, population: list[Boid], seuil: float) -> list[Boid]:
+        """
+        Renvoie la liste des voisins visibles, triés par ordre croissant de distance.
+        
+        Args:
+            population: liste de tous les boids
+            seuil: distance maximale pour considérer un boid comme voisin
+            
+        Returns:
+            list[Boid]: liste des voisins triés par distance
+        """
         # Utiliser un cache pour éviter de recalculer les voisins
         cache_key = (id(population), seuil)
         if cache_key in self._voisins_cache:
@@ -170,7 +159,15 @@ class Boid:
         return result
 
     def separation(self, population: list[Boid]):
-        "La composante de la force qui éloigne les Boids les uns des autres."
+        """
+        Calcule la composante de la force qui éloigne les boids les uns des autres.
+        
+        Args:
+            population: liste de tous les boids
+            
+        Returns:
+            np.ndarray: vecteur de séparation
+        """
         voisins_proches = self.voisins(population, 50)[: Boid.max_voisins]
         if not voisins_proches:
             return np.zeros(2)
@@ -181,7 +178,15 @@ class Boid:
         )
 
     def align(self, population: list[Boid]):
-        "La composante de la force qui aligne les Boids les uns avec les autres"
+        """
+        Calcule la composante de la force qui aligne les boids les uns avec les autres.
+        
+        Args:
+            population: liste de tous les boids
+            
+        Returns:
+            np.ndarray: vecteur d'alignement
+        """
         voisins = self.voisins(population, 200)[: Boid.max_voisins]
         if not voisins:
             return np.zeros(2)
@@ -190,7 +195,15 @@ class Boid:
         return vitesses / len(voisins) - self.dx
 
     def cohere(self: Boid, population: list[Boid]):
-        "La composante de la force qui rapproche les Boids les uns des autres."
+        """
+        Calcule la composante de la force qui rapproche les boids les uns des autres.
+        
+        Args:
+            population: liste de tous les boids
+            
+        Returns:
+            np.ndarray: vecteur de cohésion
+        """
         voisins = self.voisins(population, 200)[: Boid.max_voisins]
         if not voisins:
             return np.zeros(2)
@@ -199,7 +212,8 @@ class Boid:
         return positions / len(voisins) - self.x
 
     def detect_predator(self: Boid, population: list[Boid]) -> bool:
-        """Détecte si un predaboid est à proximité.
+        """
+        Détecte si un predaboid est à proximité.
         
         Args:
             population: liste de tous les boids
@@ -215,7 +229,8 @@ class Boid:
         return False
         
     def flee_predator(self: Boid, population: list[Boid]):
-        """Calcule une force de répulsion par rapport au predaboid.
+        """
+        Calcule une force de répulsion par rapport au predaboid.
         
         Args:
             population: liste de tous les boids
@@ -242,13 +257,24 @@ class Boid:
         return np.zeros(2)
 
     def interaction(self: Boid, population: list[Boid]) -> "Boid":
-        "On déplace le Boid en fonction de toutes les forces qui s'y appliquent"
+        """
+        Déplace le boid en fonction de toutes les forces qui s'y appliquent.
+        
+        Args:
+            population: liste de tous les boids
+            
+        Returns:
+            Boid: le boid lui-même après déplacement
+        """
         # Réinitialiser les caches à chaque itération
         self._voisins_cache = {}
         
+        # Optimisation: calculer les voisins une seule fois pour les différentes distances
+        voisins_proches = len(self.voisins(population, 25))
+        
         # Calculer les forces
         self.dx += (  # avec des pondérations respectives
-            self.separation(population) / 10
+            self.separation(population) / 50
             + self.align(population) / 8
             + self.cohere(population) / 100
             + self.flee_predator(population) / 2  # Augmenter l'importance de la fuite du prédateur
@@ -285,6 +311,9 @@ class Boid:
         return self
     
     def move(self : Boid) -> None:
+        """
+        Déplace le boid en fonction de sa vitesse et de son boost.
+        """
         if self.boost: 
             self.x += self.dx * self.boostValue
 
@@ -298,158 +327,32 @@ class Boid:
             self.x += self.dx * self.boostValue
 
             if self.boostValue <= Boid.maxBoostValue: 
-                self.boostValue += 0.05
+                self.boostValue += 0.01
 
                 if self.boostValue >= Boid.maxBoostValue: 
                     self.boostValue = Boid.maxBoostValue
 
-class Predaboid(Boid):
-    def __init__(self, position=None, vitesse=None):
-        super().__init__(position, vitesse)
-        self.eating_range = 20  # Range within which the predator can eat other boids
-        self.boostValue : float = 1.2  # Vitesse de base plus élevée
 
-    def eat(self, population: list[Boid]) -> list[Boid]:
-        """Eat boids within the eating range."""
-        new_population = []
-        for boid in population:
-            if self.distance(boid) > self.eating_range:
-                new_population.append(boid)
-        return new_population
-        
-    def flee_predator(self, population: list[Boid]):
-        """Surcharge de la méthode flee_predator pour que le predaboid ne se fuie pas lui-même."""
-        # Le predaboid ne fuit pas les autres predaboids
-        return np.zeros(2)
-        
-    def separation(self, population: list[Boid]):
-        """Surcharge de la méthode separation pour que le predaboid n'utilise pas la force de séparation."""
-        # Le predaboid n'utilise pas la force de séparation
-        return np.zeros(2)
-        
-    def move(self : Boid) -> None:
-        # Le Predaboid ne peut pas boost mais a une vitesse de base plus élevée
-        self.x += self.dx * self.boostValue
-
-# ------------------------------------------------------------------------------
-# fonctions d'interaction
-# ------------------------------------------------------------------------------
-funInteraction : TypeAlias = Callable[[Boid, list[Boid]], float]
-
-# ------------------------------------------------------------------------------
+# Fonctions d'interaction externes
 def centripete(self: Boid, population: list[Boid]):
-    "Une composante de force centripète (va vers centre)."
+    """Une composante de force centripète (va vers centre)."""
     return -self.x
 
-# ------------------------------------------------------------------------------
 def centrifuge(self: Boid, population: list[Boid]):
-    "Une composante de force centripète (va vers centre)."
+    """Une composante de force centrifuge (s'éloigne du centre)."""
     return +self.x
 
-# ------------------------------------------------------------------------------
 def noise(self: Boid, population: list[Boid]):
-    "Un peu de comportement aléatoire."
+    """Un peu de comportement aléatoire."""
     return np.random.uniform(-5, 5, 2)
 
-# ------------------------------------------------------------------------------
-# builder de boid avec centripete
-# ------------------------------------------------------------------------------
 def buildBoidCentripete() -> Boid:
+    """
+    Crée un boid avec une force centripète.
+    
+    Returns:
+        Boid: un nouveau boid avec force centripète
+    """
     boid = Boid()
     boid.add_interaction(centripete, 200)
     return boid
-
-# ------------------------------------------------------------------------------
-# simulation (avec pygame)
-# ------------------------------------------------------------------------------
-class Simulation:
-    def __init__(self: Simulation, n: int, seed: int = 2042) -> None:
-      """
-        Args:
-          n: int = nombre de boids
-          seed: int
-      """
-
-      np.random.seed(seed)
-
-      self.boids = list(buildBoidCentripete() for _ in range(n))
-      self.predator = Predaboid()  # Add a predator boid
-
-    def iteration(self: Simulation):
-        
-        # Optimisation: éviter de créer une nouvelle liste à chaque itération
-        for boid in self.boids:
-            boid.interaction(self.boids + [self.predator])
-        
-        # Predator eats boids
-        self.boids = self.predator.eat(self.boids)
-        
-        # Le predaboid n'interagit qu'avec les boids normaux, pas avec lui-même
-        self.predator.interaction(self.boids)
-
-# ------------------------------------------------------------------------------
-# main
-# ------------------------------------------------------------------------------
-
-# Initialize Pygame
-pygame.init()
-
-# Define colors
-BLUE = (0, 0, 255)
-RED = (255, 0, 0)
-
-# Set up display
-screen_size = (Boid.taille * 2, Boid.taille * 2)
-screen = pygame.display.set_mode(screen_size)
-pygame.display.set_caption('Boid Simulation')
-
-# Main loop
-running = True
-clock = pygame.time.Clock()
-
-# Create simulation
-simulation = Simulation(n=30)
-
-# Police pour le message de fin
-font = pygame.font.Font(None, 74)
-game_over_text = font.render("GAME OVER", True, (255, 0, 0))
-game_over_rect = game_over_text.get_rect(center=(Boid.taille, Boid.taille))
-
-# Variable pour suivre si le jeu est terminé
-game_over = False
-
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-    # Clear screen
-    screen.fill((255, 255, 255))
-
-    # Vérifier s'il reste des boids
-    if len(simulation.boids) == 0 and not game_over:
-        game_over = True
-        print("GAME OVER - Le prédateur a mangé tous les boids!")
-
-    # Update boids seulement si le jeu n'est pas terminé
-    if not game_over:
-        simulation.iteration()
-
-    # Draw boids
-    for boid in simulation.boids:
-        pygame.draw.circle(screen, BLUE, (int(boid.x[0] + Boid.taille), int(boid.x[1] + Boid.taille)), 5)
-
-    # Draw predator
-    pygame.draw.circle(screen, RED, (int(simulation.predator.x[0] + Boid.taille), int(simulation.predator.x[1] + Boid.taille)), 8)
-
-    # Afficher le message de fin si le jeu est terminé
-    if game_over:
-        screen.blit(game_over_text, game_over_rect)
-
-    # Refresh screen
-    pygame.display.flip()
-
-    # Cap the frame rate
-    clock.tick(60)
-
-pygame.quit()
