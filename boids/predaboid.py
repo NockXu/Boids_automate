@@ -4,7 +4,7 @@ Module contenant la classe Predaboid pour la simulation de boids.
 
 from __future__ import annotations
 import numpy as np
-from .boid import Boid
+from boid import Boid
 
 class Predaboid(Boid):
     """

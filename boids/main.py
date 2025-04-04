@@ -3,8 +3,8 @@ Module principal pour lancer la simulation de boids.
 """
 
 import pygame
-from .boid import Boid
-from .simulation import Simulation
+from boid import Boid
+from simulation import Simulation
 
 def run_simulation():
     """

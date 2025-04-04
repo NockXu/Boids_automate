@@ -4,8 +4,8 @@ Module contenant la classe Simulation pour la simulation de boids.
 
 from __future__ import annotations
 import numpy as np
-from .boid import Boid, buildBoidCentripete
-from .predaboid import Predaboid
+from boid import Boid, buildBoidCentripete
+from predaboid import Predaboid
 
 class Simulation:
     """
